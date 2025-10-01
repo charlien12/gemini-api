@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings
-import google.generativeai as genai
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+import google.generativeai as genai
 
 
 # Load environment variables
@@ -15,6 +16,7 @@ settings = Settings()
 
 # Configure Gemini
 genai.configure(api_key=settings.gemini_api_key)
+# use a faster model if needed
 model = genai.GenerativeModel("models/gemini-2.5-pro")
 
 # FastAPI app
@@ -31,11 +33,14 @@ app.add_middleware(
 class PromptRequest(BaseModel):
     prompt: str
 
-# Simple JSON response for React
-@app.post("/generate")
-async def generate_content(request: PromptRequest):
+
+@app.post("/generate_stream")
+async def generate_stream(request: PromptRequest):
     try:
-        response = model.generate_content(request.prompt)
-        return {"response": response.text or "No response generated."}
+        def event_stream():
+            for chunk in model.generate_content(request.prompt, stream=True):
+                if chunk.text:
+                    yield chunk.text  # yield partial response immediately
+        return StreamingResponse(event_stream(), media_type="text/plain")
     except Exception as e:
         return {"error": str(e)}
