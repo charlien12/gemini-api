@@ -1,0 +1,8 @@
+google-generativeai
+fastapi
+fastapi[all]
+pydantic
+python-dotenv
+uvicorn
+pydantic-settings
+markdown
