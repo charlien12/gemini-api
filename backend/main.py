@@ -17,6 +17,7 @@ settings = Settings()
 
 # Configure Gemini
 genai.configure(api_key=settings.gemini_api_key)
+# use a faster model if needed
 model = genai.GenerativeModel("models/gemini-2.5-pro")
 
 # FastAPI app

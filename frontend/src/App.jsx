@@ -60,7 +60,10 @@ function App() {
     } catch (err) {
       aiMessage.content = "Error connecting to backend.";
       setMessages((prev) => [...prev.slice(0, -1), aiMessage]);
+      aiMessage.content = "Error connecting to backend.";
+      setMessages((prev) => [...prev.slice(0, -1), aiMessage]);
     }
+
 
     setLoading(false);
   };
@@ -140,3 +143,4 @@ function App() {
 }
 
 export default App;
+
