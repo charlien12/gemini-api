@@ -1,43 +1,68 @@
-def auto_format_to_table(text: str) -> str:
-    """
-    Converts only bullet-point list blocks with 'Feature: val1 | val2 | ...'
-    into Markdown tables.
-    Leaves normal text, paragraphs, and headings untouched.
-    """
-    lines = text.strip().split("\n")
-    output_lines = []
-    table_block = []
-    headers = None
+from fastapi import FastAPI, UploadFile, File, Form
+from pydantic_settings import BaseSettings
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse, JSONResponse
+import google.generativeai as genai
+from typing import Optional
+import shutil
+import os
 
-    def flush_table():
-        nonlocal headers, table_block, output_lines
-        if headers and table_block:
-            # build markdown table
-            table_md = "| " + " | ".join(headers) + " |\n"
-            table_md += "| " + " | ".join([":---"] * len(headers)) + " |\n"
-            for row in table_block:
-                table_md += "| " + " | ".join(row) + " |\n"
-            output_lines.append(table_md)
-        # reset
-        headers, table_block = None, []
+# Load environment variables
+class Settings(BaseSettings):
+gemini_api_key: str
+class Config:
+env_file = ".env"
 
-    for line in lines:
-        match = re.match(r"[-*]\s*\*\*(.+?)\*\*:\s*(.+)", line)
-        if match:
-            feature, values = match.groups()
-            values_list = [v.strip() for v in values.split("|")]
+settings = Settings()
 
-            # set headers dynamically
-            if not headers:
-                headers = ["Feature"] + [f"Option {i+1}" for i in range(len(values_list))]
+# Configure Gemini
+genai.configure(api_key=settings.gemini_api_key)
+# use a faster model if needed
+model = genai.GenerativeModel("models/gemini-2.5-pro")
 
-            table_block.append([feature.strip()] + values_list)
-        else:
-            # flush any collected table before writing normal text
-            flush_table()
-            output_lines.append(line)
+# FastAPI app
+app = FastAPI()
+app.add_middleware(
+CORSMiddleware,
+allow_origins=["http://localhost:5173"],
+allow_credentials=True,
+allow_methods=["*"],
+allow_headers=["*"],
+)
 
-    # flush remaining table at end
-    flush_table()
 
-    return "\n".join(output_lines)
+@app.post("/generate_stream")
+async def generate_stream(
+prompt: str = Form(...),
+file: Optional[UploadFile] = File(None)
+):
+try:
+def event_stream():
+inputs = [prompt]
+
+# Handle uploaded file
+if file:
+file_ext = file.filename.split(".")[-1].lower()
+temp_file = f"temp_upload.{file_ext}"
+with open(temp_file, "wb") as buffer:
+shutil.copyfileobj(file.file, buffer)
+
+# Upload to Gemini
+if file_ext in ["jpg", "jpeg", "png", "gif", "webp", "mp4", "mov", "avi", "mkv"]:
+uploaded_file = genai.upload_file(temp_file)
+inputs.append(uploaded_file)
+
+# (Optional cleanup: os.remove(temp_file))
+
+# Streaming Gemini response in Markdown
+yield "## 🤖 Gemini Response\n\n"  # add nice heading before content
+for chunk in model.generate_content(inputs, stream=True):
+if chunk.text:
+# Gemini often outputs plain text but Markdown is safe
+yield chunk.text
+
+# Important: use Markdown media type so frontend displays properly
+return StreamingResponse(event_stream(), media_type="text/markdown")
+
+except Exception as e:
+return JSONResponse({"error": str(e)})
